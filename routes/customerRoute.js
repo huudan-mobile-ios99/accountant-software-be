@@ -37,4 +37,38 @@ router.get("/gaming_date_customer", async (req, res, next) => {
   }
 });
 
+
+
+
+// GET /api/v1/customer/alert_bill?date=2025-11-26&page=1&limit=50
+router.get("/alert_bill", async (req, res, next) => {
+  try {
+    const date = req.query.date;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+
+    if (!date) {
+      return res.status(400).json({
+        status: false,
+        message: "Missing required parameter: date",
+        data: [],
+      });
+    }
+
+    const result = await dboperation.getAlertBillByDate(date, page, limit);
+
+    res.json({
+      status: true,
+      message: "Alert bill list fetched successfully",
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      data: result.data,
+    });
+  } catch (err) {
+    console.error("Error in alert_bill route:", err);
+    next(err);
+  }
+});
+
 module.exports = router;

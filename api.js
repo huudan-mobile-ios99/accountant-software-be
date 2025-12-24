@@ -19,14 +19,6 @@ app.use(body_parser.json());
 app.use(cors());
 app.use(morgan("dev"));
 
-// Static Flutter build
-app.use("/", express.static("public-flutter"));
-app.use("/assets", express.static("public-flutter/assets"));
-
-// Basic route
-app.get("/", (req, res) => {
-  res.sendFile(path.resolve("./public-flutter/index.html"));
-});
 
 // ✅ Import and use versioned routes
 const customerRoutes = require("./routes/customerRoute");

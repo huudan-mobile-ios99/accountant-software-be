@@ -13,10 +13,12 @@ async function getListCustomerForAccountantSoftware(page = 1, limit = 100) {
 
     const query = `
         SELECT [Number],
-               c.Surname,
-               c.[Forename],
-               [Title],
-               [PreferredName],
+                c.Surname,
+                c.[Forename],
+                c.MiddleName,
+                c.SurnameSoundsLike,
+                c.[Title],
+                c.[PreferredName],
                CASE [Gender]
                     WHEN 1 THEN 'Male'
                     WHEN 2 THEN 'Female'
@@ -25,7 +27,8 @@ async function getListCustomerForAccountantSoftware(page = 1, limit = 100) {
                [DateOfBirth],
                co.Name AS [National],
                co.Nationality,
-               ci.Reference AS [Passport]
+               ci.Reference AS [Passport],
+               ci.ExpiryDate AS PassportExpiryDate
         FROM [neoncmsprod].[dbo].[Customer] AS c
         JOIN dbo.CustomerIdentification AS ci
           ON ci.CustomerID = c.CustomerID
@@ -90,7 +93,6 @@ async function getCustomersByGamingDate(date) {
     console.log(`getCustomersByGamingDate `);
     try {
         const pool = await sql.connect(config);
-
         const result = await pool.request()
             .input("GamingDate", sql.Date, date)
             .query(`
@@ -138,11 +140,65 @@ async function getCustomersByGamingDate(date) {
     }
 }
 
+async function getAlertBillByDate(date, page = 1, limit = 50) {
+  try {
+    const pool = await sql.connect(config);
 
+    const offset = (page - 1) * limit;
 
+    // ⭐ 1. Get total count
+    const countResult = await pool.request()
+      .input("date", sql.Date, date)
+      .query(`
+          SELECT COUNT(*) AS total
+          FROM dbo.Alert A
+          JOIN dbo.Machine M ON M.MachineID = A.MachineID
+          JOIN dbo.Customer C ON C.CustomerID = A.CustomerID
+          WHERE CAST(A.GamingDate AS DATE) = @date
+            AND A.AlertConfigurationID BETWEEN 51 AND 56
+      `);
+
+    const total = countResult.recordset[0].total;
+
+    // ⭐ 2. Get paginated rows
+    const dataResult = await pool.request()
+      .input("date", sql.Date, date)
+      .input("limit", sql.Int, limit)
+      .input("offset", sql.Int, offset)
+      .query(`
+          SELECT
+            A.GamingDate,
+            A.ActualDateTime,
+            C.Number AS CustomerNumber,
+            C.PreferredName,
+            A.Item AS MachineNumber,
+            A.Detail
+          FROM dbo.Alert A
+          JOIN dbo.Machine M ON M.MachineID = A.MachineID
+          JOIN dbo.Customer C ON C.CustomerID = A.CustomerID
+          WHERE CAST(A.GamingDate AS DATE) = @date
+            AND A.AlertConfigurationID BETWEEN 51 AND 56
+          ORDER BY C.Number ASC, A.ActualDateTime ASC
+          OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
+      `);
+
+    return {
+      total,
+      page,
+      limit,
+      data: dataResult.recordset
+    };
+
+  } catch (err) {
+    console.error("DB Error getAlertBillByDate:", err);
+    throw err;
+  }
+}
 
 module.exports = {
     //get customer list
     getListCustomerForAccountantSoftware:getListCustomerForAccountantSoftware,
     getCustomersByGamingDate:getCustomersByGamingDate,
+    //alert bill
+    getAlertBillByDate:getAlertBillByDate
 }

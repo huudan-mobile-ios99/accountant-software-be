@@ -24,6 +24,10 @@ app.use(morgan("dev"));
 const customerRoutes = require("./routes/customerRoute");
 app.use("/api/v1/customer", customerRoutes);
 
+// ✅ Import and use versioned routes
+const ticketRoutes = require("./routes/ticketRoute");
+app.use("/api/v1/ticket", ticketRoutes);
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error("Error:", err.message);

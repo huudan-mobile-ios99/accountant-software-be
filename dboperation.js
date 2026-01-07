@@ -195,10 +195,103 @@ async function getAlertBillByDate(date, page = 1, limit = 50) {
   }
 }
 
+
+
+//GET TICKET TRANSACTION BY DATE
+// Get ticket transactions by gaming date (with pagination)
+async function getTicketTransactionByGamingDate(gamingDate, page = 1, limit = 100) {
+    console.log(`getTicketTransactionByGamingDate | date=${gamingDate}, page=${page}, limit=${limit}`);
+    const offset = (page - 1) * limit;
+
+    const query = `
+        SELECT
+              c.Number AS CustomerNumber
+            , c.Forename
+            , c.MiddleName
+            , c.Surname
+            , c.PreferredName
+            , t.GamingDate
+            , tit.Number AS TicketNumber
+            , tk.Amount
+            , t.TransactionDateTime
+            , t.TransactionNumber
+            , t.SystemComment
+        FROM [neoncmsprod].[dbo].[Transaction] t
+        JOIN dbo.TicketingIssueTransaction tit
+            ON t.TransactionID = tit.TransactionID
+        JOIN dbo.Ticket tk
+            ON tk.Number = tit.Number
+        JOIN dbo.Customer c
+            ON c.CustomerID = t.CustomerID
+        WHERE t.GamingDate = @gamingDate
+        ORDER BY t.TransactionDateTime
+        OFFSET @offset ROWS
+        FETCH NEXT @limit ROWS ONLY;
+
+        SELECT COUNT(*) AS totalCount
+        FROM [neoncmsprod].[dbo].[Transaction] t
+        WHERE t.GamingDate = @gamingDate;
+    `;
+
+    try {
+        const pool = await sql.connect(config);
+        const request = pool.request();
+
+        request.input("gamingDate", sql.Date, gamingDate);
+        request.input("offset", sql.Int, offset);
+        request.input("limit", sql.Int, limit);
+
+        const result = await request.query(query);
+        await pool.close();
+
+        const data = result.recordsets[0];
+        const totalCount = result.recordsets[1][0].totalCount;
+        const hasData = data.length > 0;
+
+        return {
+            status: hasData,
+            message: hasData
+                ? `Found ${data.length} ticket transactions (page ${page} of ${Math.ceil(totalCount / limit)})`
+                : "No ticket transactions found",
+            data: {
+                gamingDate,
+                page,
+                limit,
+                totalCount: hasData ? totalCount : 0,
+                totalPages: hasData ? Math.ceil(totalCount / limit) : 0,
+                transactions: data
+            }
+        };
+    } catch (error) {
+        console.error("SQL error:", error);
+
+        return {
+            status: false,
+            message: "server error",
+            data: {
+                gamingDate,
+                page,
+                limit,
+                totalCount: 0,
+                totalPages: 0,
+                transactions: []
+            }
+        };
+    }
+}
+
+module.exports = {
+    getTicketTransactionByGamingDate
+};
+
+
+
+
 module.exports = {
     //get customer list
     getListCustomerForAccountantSoftware:getListCustomerForAccountantSoftware,
     getCustomersByGamingDate:getCustomersByGamingDate,
     //alert bill
-    getAlertBillByDate:getAlertBillByDate
+    getAlertBillByDate:getAlertBillByDate,
+    getTicketTransactionByGamingDate:getTicketTransactionByGamingDate,
 }

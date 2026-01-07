@@ -280,9 +280,6 @@ async function getTicketTransactionByGamingDate(gamingDate, page = 1, limit = 10
     }
 }
 
-module.exports = {
-    getTicketTransactionByGamingDate
-};
 
 
 

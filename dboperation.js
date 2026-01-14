@@ -202,7 +202,6 @@ async function getAlertBillByDate(date, page = 1, limit = 50) {
 async function getTicketTransactionByGamingDate(gamingDate, page = 1, limit = 100) {
     console.log(`getTicketTransactionByGamingDate | date=${gamingDate}, page=${page}, limit=${limit}`);
     const offset = (page - 1) * limit;
-
     const query = `
         SELECT
               c.Number AS CustomerNumber
@@ -283,6 +282,90 @@ async function getTicketTransactionByGamingDate(gamingDate, page = 1, limit = 10
 
 
 
+// GET TICKET REDEMPTIONS BY GAMING DATE (WITH PAGINATION)
+// GET TICKETS BY GAMING DATE (ISSUED + OPTIONAL REDEMPTION INFO)
+async function getTicketRedemptionByGamingDate(gamingDate, page = 1, limit = 100) {
+    console.log(`getTicketsByGamingDate | date=${gamingDate}, page=${page}, limit=${limit}`);
+    const offset = (page - 1) * limit;
+
+    const query = `
+        SELECT
+              t.TicketID
+            , t.GamingDate
+            , t.Number AS TicketNumber
+            , t.SequenceNumber
+            , t.ActualDateTime
+            , c.Number AS CustomerNumber
+            , t.Amount
+            , t.ExpiryDate
+            , t.PayoutGamingDate
+            , t.PayoutDateTime
+            , cd.Name AS CashDesk
+            , m.Number AS MachineNumber
+        FROM [neoncmsprod].[dbo].[Ticket] t
+        LEFT JOIN dbo.Customer c
+            ON c.CustomerID = t.CustomerID
+        LEFT JOIN dbo.Machine m
+            ON m.MachineID = t.PayoutMachineID
+        LEFT JOIN dbo.CashDesk cd
+            ON cd.CashDeskID = t.PayoutCashDeskID
+        WHERE t.GamingDate = @gamingDate
+        ORDER BY t.ActualDateTime
+        OFFSET @offset ROWS
+        FETCH NEXT @limit ROWS ONLY;
+
+        SELECT COUNT(*) AS totalCount
+        FROM [neoncmsprod].[dbo].[Ticket]
+        WHERE GamingDate = @gamingDate;
+    `;
+
+    try {
+        const pool = await sql.connect(config);
+        const request = pool.request();
+
+        request.input("gamingDate", sql.Date, gamingDate);
+        request.input("offset", sql.Int, offset);
+        request.input("limit", sql.Int, limit);
+
+        const result = await request.query(query);
+        await pool.close();
+
+        const data = result.recordsets[0];
+        const totalCount = result.recordsets[1][0].totalCount;
+        const hasData = data.length > 0;
+
+        return {
+            status: hasData,
+            message: hasData
+                ? `Found ${data.length} tickets (page ${page} of ${Math.ceil(totalCount / limit)})`
+                : "No tickets found",
+            data: {
+                gamingDate,
+                page,
+                limit,
+                totalCount: hasData ? totalCount : 0,
+                totalPages: hasData ? Math.ceil(totalCount / limit) : 0,
+                tickets: data
+            }
+        };
+    } catch (error) {
+        console.error("SQL error:", error);
+
+        return {
+            status: false,
+            message: "server error",
+            data: {
+                gamingDate,
+                page,
+                limit,
+                totalCount: 0,
+                totalPages: 0,
+                tickets: []
+            }
+        };
+    }
+}
+
 
 module.exports = {
     //get customer list
@@ -291,4 +374,5 @@ module.exports = {
     //alert bill
     getAlertBillByDate:getAlertBillByDate,
     getTicketTransactionByGamingDate:getTicketTransactionByGamingDate,
+    getTicketRedemptionByGamingDate:getTicketRedemptionByGamingDate,
 }

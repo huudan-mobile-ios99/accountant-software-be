@@ -284,13 +284,104 @@ async function getTicketTransactionByGamingDate(gamingDate, page = 1, limit = 10
 
 // GET TICKET REDEMPTIONS BY GAMING DATE (WITH PAGINATION)
 // GET TICKETS BY GAMING DATE (ISSUED + OPTIONAL REDEMPTION INFO)
+// async function getTicketRedemptionByGamingDate(gamingDate, page = 1, limit = 100) {
+//     console.log(`getTicketsByGamingDate | date=${gamingDate}, page=${page}, limit=${limit}`);
+//     const offset = (page - 1) * limit;
+
+//     const query = `
+//         SELECT
+//               t.TicketID
+//             , t.GamingDate
+//             , t.Number AS TicketNumber
+//             , t.SequenceNumber
+//             , t.ActualDateTime
+//             , c.Number AS CustomerNumber
+//             , t.Amount
+//             , t.ExpiryDate
+//             , t.PayoutGamingDate
+//             , t.PayoutDateTime
+//             , cd.Name AS CashDesk
+//             , m.Number AS MachineNumber
+//         FROM [neoncmsprod].[dbo].[Ticket] t
+//         LEFT JOIN dbo.Customer c
+//             ON c.CustomerID = t.CustomerID
+//         LEFT JOIN dbo.Machine m
+//             ON m.MachineID = t.PayoutMachineID
+//         LEFT JOIN dbo.CashDesk cd
+//             ON cd.CashDeskID = t.PayoutCashDeskID
+//         WHERE t.GamingDate = @gamingDate
+//         ORDER BY t.ActualDateTime
+//         OFFSET @offset ROWS
+//         FETCH NEXT @limit ROWS ONLY;
+
+//         SELECT COUNT(*) AS totalCount
+//         FROM [neoncmsprod].[dbo].[Ticket]
+//         WHERE GamingDate = @gamingDate;
+//     `;
+
+//     try {
+//         const pool = await sql.connect(config);
+//         const request = pool.request();
+
+//         request.input("gamingDate", sql.Date, gamingDate);
+//         request.input("offset", sql.Int, offset);
+//         request.input("limit", sql.Int, limit);
+
+//         const result = await request.query(query);
+//         await pool.close();
+
+//         // 🔥 ONLY CHANGE IS HERE (TYPE CONVERSION)
+//         const data = result.recordsets[0].map(row => ({
+//             ...row,
+//             TicketNumber: row.TicketNumber !== null ? Number(row.TicketNumber) : null,
+//             MachineNumber: row.MachineNumber !== null ? Number(row.MachineNumber) : null
+//         }));
+
+//         const totalCount = result.recordsets[1][0].totalCount;
+//         const hasData = data.length > 0;
+
+//         return {
+//             status: hasData,
+//             message: hasData
+//                 ? `Found ${data.length} tickets (page ${page} of ${Math.ceil(totalCount / limit)})`
+//                 : "No tickets found",
+//             data: {
+//                 gamingDate,
+//                 page,
+//                 limit,
+//                 totalCount: hasData ? totalCount : 0,
+//                 totalPages: hasData ? Math.ceil(totalCount / limit) : 0,
+//                 tickets: data
+//             }
+//         };
+//     } catch (error) {
+//         console.error("SQL error:", error);
+
+//         return {
+//             status: false,
+//             message: "server error",
+//             data: {
+//                 gamingDate,
+//                 page,
+//                 limit,
+//                 totalCount: 0,
+//                 totalPages: 0,
+//                 tickets: []
+//             }
+//         };
+//     }
+// }
+
+// GET TICKET REDEMPTION BY GAMING DATE (with pagination)
 async function getTicketRedemptionByGamingDate(gamingDate, page = 1, limit = 100) {
-    console.log(`getTicketsByGamingDate | date=${gamingDate}, page=${page}, limit=${limit}`);
+    console.log(`getTicketRedemptionByGamingDate | date=${gamingDate}, page=${page}, limit=${limit}`);
+
     const offset = (page - 1) * limit;
 
     const query = `
         SELECT
               t.TicketID
+            , tr.TransactionNumber
             , t.GamingDate
             , t.Number AS TicketNumber
             , t.SequenceNumber
@@ -305,6 +396,10 @@ async function getTicketRedemptionByGamingDate(gamingDate, page = 1, limit = 100
         FROM [neoncmsprod].[dbo].[Ticket] t
         LEFT JOIN dbo.Customer c
             ON c.CustomerID = t.CustomerID
+        LEFT JOIN dbo.TicketingTransaction tt
+            ON tt.TicketNumber = t.Number
+        LEFT JOIN dbo.[Transaction] tr
+            ON tr.TransactionID = tt.TransactionID
         LEFT JOIN dbo.Machine m
             ON m.MachineID = t.PayoutMachineID
         LEFT JOIN dbo.CashDesk cd
@@ -332,19 +427,19 @@ async function getTicketRedemptionByGamingDate(gamingDate, page = 1, limit = 100
 
         const data = result.recordsets[0];
         const totalCount = result.recordsets[1][0].totalCount;
-        const hasData = data.length > 0;
+        const totalPages = Math.ceil(totalCount / limit);
 
         return {
-            status: hasData,
-            message: hasData
-                ? `Found ${data.length} tickets (page ${page} of ${Math.ceil(totalCount / limit)})`
-                : "No tickets found",
+            status: data.length > 0,
+            message: data.length > 0
+                ? `Found ${data.length} ticket redemptions (page ${page} of ${totalPages})`
+                : "No ticket redemptions found",
             data: {
                 gamingDate,
                 page,
                 limit,
-                totalCount: hasData ? totalCount : 0,
-                totalPages: hasData ? Math.ceil(totalCount / limit) : 0,
+                totalCount,
+                totalPages,
                 tickets: data
             }
         };
@@ -365,6 +460,7 @@ async function getTicketRedemptionByGamingDate(gamingDate, page = 1, limit = 100
         };
     }
 }
+
 
 
 module.exports = {
